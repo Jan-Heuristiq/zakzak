@@ -31,21 +31,62 @@ st.markdown("""
 
 class ZakZakBot:
     def __init__(self):
-        self.weather_api_key = st.secrets.get("OPENWEATHER_API_KEY", "YOUR_API_KEY")
+        # Zakopane coordinates
+        self.latitude = 49.299
+        self.longitude = 19.949
         self.webhook_url = st.secrets.get("PIPEDREAM_WEBHOOK", "YOUR_WEBHOOK_URL")
         
+    def get_weather_description(self, wmo_code):
+        """Convert WMO weather code to description in German"""
+        wmo_codes = {
+            0: "Klar",
+            1: "Überwiegend klar",
+            2: "Teilweise bewölkt",
+            3: "Bedeckt",
+            45: "Neblig",
+            48: "Neblig mit Reif",
+            51: "Leichter Nieselregen",
+            53: "Mäßiger Nieselregen",
+            55: "Starker Nieselregen",
+            61: "Leichter Regen",
+            63: "Mäßiger Regen",
+            65: "Starker Regen",
+            71: "Leichter Schneefall",
+            73: "Mäßiger Schneefall",
+            75: "Starker Schneefall",
+            77: "Schneegriesel",
+            85: "Leichte Schneeschauer",
+            86: "Starke Schneeschauer",
+            95: "Gewitter"
+        }
+        return wmo_codes.get(wmo_code, "Unbekannt")
+        
     def get_weather(self):
-        """Fetch weather data for Zakopane"""
+        """Fetch weather data from OpenMeteo"""
         try:
-            url = f"https://api.openweathermap.org/data/2.5/weather?q=Zakopane&appid={self.weather_api_key}&units=metric"
-            response = requests.get(url)
+            url = f"https://api.open-meteo.com/v1/forecast"
+            params = {
+                "latitude": self.latitude,
+                "longitude": self.longitude,
+                "current": ["temperature_2m", "wind_speed_10m", "weather_code"],
+                "hourly": "snow_depth",
+                "timezone": "Europe/Warsaw"
+            }
+            
+            response = requests.get(url, params=params)
             data = response.json()
             
+            # Get current conditions
+            current = data["current"]
+            
+            # Get snow depth (take the most recent value)
+            snow = data["hourly"]["snow_depth"][0]
+            
             return {
-                "temperature": round(data["main"]["temp"]),
-                "conditions": data["weather"][0]["description"],
-                "wind_speed": round(data["wind"]["speed"] * 3.6),  # Convert to km/h
-                "snow": data.get("snow", {}).get("1h", 0)
+                "temperature": round(current["temperature_2m"]),
+                "conditions": self.get_weather_description(current["weather_code"]),
+                "wind_speed": round(current["wind_speed_10m"]),
+                "snow": round(snow * 100)  # Convert meters to cm
             }
         except Exception as e:
             st.error(f"Fehler beim Abrufen der Wetterdaten: {e}")
@@ -60,14 +101,38 @@ class ZakZakBot:
             "snow": 15
         }
     
-    def get_ski_route(self):
-        """Get random ski route recommendation"""
-        routes = [
-            {"name": "Kasprowy Wierch", "difficulty": "Fortgeschritten", "conditions": "Ausgezeichnet"},
-            {"name": "Nosal", "difficulty": "Mittel", "conditions": "Gut"},
-            {"name": "Harenda", "difficulty": "Anfänger", "conditions": "Sehr gut"}
-        ]
-        return random.choice(routes)
+    def get_ski_route(self, weather):
+        """Get ski route recommendation based on weather"""
+        routes = {
+            'excellent': [
+                {"name": "Kasprowy Wierch", "difficulty": "Fortgeschritten", "conditions": "Ausgezeichnet"},
+                {"name": "Nosal", "difficulty": "Mittel", "conditions": "Perfekt"},
+            ],
+            'good': [
+                {"name": "Kasprowy Wierch", "difficulty": "Fortgeschritten", "conditions": "Gut"},
+                {"name": "Harenda", "difficulty": "Anfänger", "conditions": "Sehr gut"},
+            ],
+            'moderate': [
+                {"name": "Nosal", "difficulty": "Mittel", "conditions": "Akzeptabel"},
+                {"name": "Harenda", "difficulty": "Anfänger", "conditions": "Gut"},
+            ],
+            'poor': [
+                {"name": "Harenda", "difficulty": "Anfänger", "conditions": "Mäßig"},
+                {"name": "Szymoszkowa", "difficulty": "Anfänger", "conditions": "Befahrbar"},
+            ]
+        }
+        
+        # Determine conditions based on weather
+        if weather['snow'] > 10 and -5 <= weather['temperature'] <= 2:
+            condition = 'excellent'
+        elif weather['snow'] > 5 and -10 <= weather['temperature'] <= 4:
+            condition = 'good'
+        elif weather['snow'] > 0 and -15 <= weather['temperature'] <= 5:
+            condition = 'moderate'
+        else:
+            condition = 'poor'
+            
+        return random.choice(routes[condition])
     
     def get_fun_fact(self):
         """Get random fun fact about Zakopane"""
@@ -76,7 +141,10 @@ class ZakZakBot:
             "Sie ist bekannt als die 'Winterhauptstadt Polens'",
             "Der Name bedeutet auf Polnisch 'vergraben'",
             "Die typische Zakopane-Architektur wurde von Stanisław Witkiewicz entwickelt",
-            "Die Skisprungschanze Wielka Krokiew ist eines der Wahrzeichen der Stadt"
+            "Die Skisprungschanze Wielka Krokiew ist eines der Wahrzeichen der Stadt",
+            "Zakopane liegt am Fuße der Tatra, dem höchsten Gebirgszug der Karpaten",
+            "Die Stadt hat etwa 27.000 Einwohner, empfängt aber jährlich über 2,5 Millionen Touristen",
+            "Der höchste Berg in der Nähe ist der Kasprowy Wierch mit 1.987 Metern"
         ]
         return random.choice(facts)
     
@@ -87,7 +155,7 @@ class ZakZakBot:
 🌨 Wetter:
 • Temperatur: {weather["temperature"]}°C
 • Bedingungen: {weather["conditions"]}
-• Neuschnee: {weather["snow"]}cm
+• Schneehöhe: {weather["snow"]}cm
 • Wind: {weather["wind_speed"]}km/h
 
 🎿 Heute empfohlen:
@@ -102,7 +170,7 @@ Einen schönen Tag auf der Piste! ⛷️"""
     def send_whatsapp_update(self):
         """Send update to WhatsApp via Pipedream webhook"""
         weather = self.get_weather()
-        route = self.get_ski_route()
+        route = self.get_ski_route(weather)
         fact = self.get_fun_fact()
         message = self.compose_message(weather, route, fact)
         
@@ -123,20 +191,20 @@ def main():
     st.title("ZakZak Daily ⛷️")
     st.write(f"Letztes Update: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
     
-    # Create three columns
-    col1, col2, col3 = st.columns(3)
-    
     # Get data
     weather = bot.get_weather()
-    route = bot.get_ski_route()
+    route = bot.get_ski_route(weather)
     fact = bot.get_fun_fact()
+    
+    # Create three columns
+    col1, col2, col3 = st.columns(3)
     
     # Weather Card
     with col1:
         st.markdown("### ❄️ Wetterbedingungen")
         st.write(f"🌡️ Temperatur: {weather['temperature']}°C")
         st.write(f"☁️ Bedingungen: {weather['conditions']}")
-        st.write(f"❄️ Neuschnee: {weather['snow']}cm")
+        st.write(f"❄️ Schneehöhe: {weather['snow']}cm")
         st.write(f"💨 Wind: {weather['wind_speed']}km/h")
     
     # Ski Route Card
