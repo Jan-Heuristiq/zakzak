@@ -1,74 +1,52 @@
 import streamlit as st
-import requests
-import datetime
-import random
+import time
+import os
+import json
+import logging
 from datetime import datetime
+import requests
+import random
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
+import schedule
+import threading
 
-# Page config
-st.set_page_config(
-    page_title="ZakZak Daily",
-    page_icon="⛷️",
-    layout="wide"
-)
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Custom CSS for styling
-st.markdown("""
-    <style>
-    .main {
-        background: linear-gradient(180deg, #FFFFFF 0%, #FFE5E5 50%, #FF9999 100%);
-    }
-    .stApp {
-        background: linear-gradient(180deg, #FFFFFF 0%, #FFE5E5 50%, #FF9999 100%);
-    }
-    h1 {
-        color: #1e3a8a !important;
-    }
-    .icon-blue {
-        color: #2563eb;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# Include the SlopeData class here [Previous code from slope-lift-data artifact]
+# Include the fun facts code here [Previous code from zakopane-facts artifact]
 
 class ZakZakBot:
     def __init__(self):
-        # Zakopane coordinates
-        self.latitude = 49.299
-        self.longitude = 19.949
-        self.webhook_url = st.secrets.get("PIPEDREAM_WEBHOOK", "YOUR_WEBHOOK_URL")
+        self.driver = None
+        self.is_running = False
+        self.last_message_time = None
+        self.slope_data = SlopeData()
         
-    def get_weather_description(self, wmo_code):
-        """Convert WMO weather code to description in German"""
-        wmo_codes = {
-            0: "Klar",
-            1: "Überwiegend klar",
-            2: "Teilweise bewölkt",
-            3: "Bedeckt",
-            45: "Neblig",
-            48: "Neblig mit Reif",
-            51: "Leichter Nieselregen",
-            53: "Mäßiger Nieselregen",
-            55: "Starker Nieselregen",
-            61: "Leichter Regen",
-            63: "Mäßiger Regen",
-            65: "Starker Regen",
-            71: "Leichter Schneefall",
-            73: "Mäßiger Schneefall",
-            75: "Starker Schneefall",
-            77: "Schneegriesel",
-            85: "Leichte Schneeschauer",
-            86: "Starke Schneeschauer",
-            95: "Gewitter"
-        }
-        return wmo_codes.get(wmo_code, "Unbekannt")
-        
+    def setup_driver(self):
+        """Initialize Chrome driver with WhatsApp Web"""
+        if not self.driver:
+            options = webdriver.ChromeOptions()
+            options.add_argument('--start-maximized')
+            options.add_argument('--disable-gpu')
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument("--disable-notifications")
+            self.driver = webdriver.Chrome(options=options)
+            
     def get_weather(self):
-        """Fetch weather data from OpenMeteo"""
+        """Fetch weather data for Zakopane"""
         try:
-            url = f"https://api.open-meteo.com/v1/forecast"
+            url = "https://api.open-meteo.com/v1/forecast"
             params = {
-                "latitude": self.latitude,
-                "longitude": self.longitude,
-                "current": ["temperature_2m", "wind_speed_10m", "weather_code"],
+                "latitude": 49.299,
+                "longitude": 19.949,
+                "current": ["temperature_2m", "weather_code", "wind_speed_10m"],
                 "hourly": "snow_depth",
                 "timezone": "Europe/Warsaw"
             }
@@ -76,161 +54,186 @@ class ZakZakBot:
             response = requests.get(url, params=params)
             data = response.json()
             
-            # Get current conditions
-            current = data["current"]
-            
-            # Get snow depth (take the most recent value)
-            snow = data["hourly"]["snow_depth"][0]
-            
             return {
-                "temperature": round(current["temperature_2m"]),
-                "conditions": self.get_weather_description(current["weather_code"]),
-                "wind_speed": round(current["wind_speed_10m"]),
-                "snow": round(snow * 100)  # Convert meters to cm
+                "temperature": round(data["current"]["temperature_2m"]),
+                "conditions": self.get_weather_description(data["current"]["weather_code"]),
+                "wind_speed": round(data["current"]["wind_speed_10m"]),
+                "snow": round(data["hourly"]["snow_depth"][0] * 100)
             }
         except Exception as e:
-            st.error(f"Fehler beim Abrufen der Wetterdaten: {e}")
+            logger.error(f"Error fetching weather: {e}")
             return self.get_dummy_weather()
-    
-    def get_dummy_weather(self):
-        """Fallback weather data"""
-        return {
-            "temperature": -2,
-            "conditions": "Schneefall",
-            "wind_speed": 8,
-            "snow": 15
+
+    def get_weather_description(self, code):
+        """Convert weather code to German description"""
+        descriptions = {
+            0: "Klar",
+            1: "Überwiegend klar",
+            2: "Teilweise bewölkt",
+            3: "Bedeckt",
+            45: "Neblig",
+            71: "Leichter Schneefall",
+            73: "Mäßiger Schneefall",
+            75: "Starker Schneefall"
         }
-    
-    def get_ski_route(self, weather):
-        """Get ski route recommendation based on weather"""
-        routes = {
-            'excellent': [
-                {"name": "Kasprowy Wierch", "difficulty": "Fortgeschritten", "conditions": "Ausgezeichnet"},
-                {"name": "Nosal", "difficulty": "Mittel", "conditions": "Perfekt"},
-            ],
-            'good': [
-                {"name": "Kasprowy Wierch", "difficulty": "Fortgeschritten", "conditions": "Gut"},
-                {"name": "Harenda", "difficulty": "Anfänger", "conditions": "Sehr gut"},
-            ],
-            'moderate': [
-                {"name": "Nosal", "difficulty": "Mittel", "conditions": "Akzeptabel"},
-                {"name": "Harenda", "difficulty": "Anfänger", "conditions": "Gut"},
-            ],
-            'poor': [
-                {"name": "Harenda", "difficulty": "Anfänger", "conditions": "Mäßig"},
-                {"name": "Szymoszkowa", "difficulty": "Anfänger", "conditions": "Befahrbar"},
-            ]
-        }
+        return descriptions.get(code, "Unbekannt")
         
-        # Determine conditions based on weather
-        if weather['snow'] > 10 and -5 <= weather['temperature'] <= 2:
-            condition = 'excellent'
-        elif weather['snow'] > 5 and -10 <= weather['temperature'] <= 4:
-            condition = 'good'
-        elif weather['snow'] > 0 and -15 <= weather['temperature'] <= 5:
-            condition = 'moderate'
-        else:
-            condition = 'poor'
-            
-        return random.choice(routes[condition])
-    
-    def get_fun_fact(self):
-        """Get random fun fact about Zakopane"""
-        facts = [
-            "Zakopane ist die höchstgelegene Stadt Polens",
-            "Sie ist bekannt als die 'Winterhauptstadt Polens'",
-            "Der Name bedeutet auf Polnisch 'vergraben'",
-            "Die typische Zakopane-Architektur wurde von Stanisław Witkiewicz entwickelt",
-            "Die Skisprungschanze Wielka Krokiew ist eines der Wahrzeichen der Stadt",
-            "Zakopane liegt am Fuße der Tatra, dem höchsten Gebirgszug der Karpaten",
-            "Die Stadt hat etwa 27.000 Einwohner, empfängt aber jährlich über 2,5 Millionen Touristen",
-            "Der höchste Berg in der Nähe ist der Kasprowy Wierch mit 1.987 Metern"
-        ]
-        return random.choice(facts)
-    
     def compose_message(self, weather, route, fact):
         """Compose WhatsApp message"""
         return f"""🏔 ZakZak Daily Update ⛷️
 
 🌨 Wetter:
-• Temperatur: {weather["temperature"]}°C
-• Bedingungen: {weather["conditions"]}
-• Schneehöhe: {weather["snow"]}cm
-• Wind: {weather["wind_speed"]}km/h
+• Temperatur: {weather['temperature']}°C
+• Bedingungen: {weather['conditions']}
+• Schneehöhe: {weather['snow']}cm
+• Wind: {weather['wind_speed']}km/h
 
-🎿 Heute empfohlen:
-{route["name"]} - {route["conditions"]}
-Schwierigkeitsgrad: {route["difficulty"]}
+{route}
 
 💡 Fun Fact:
 {fact}
 
 Einen schönen Tag auf der Piste! ⛷️"""
-    
-    def send_whatsapp_update(self):
-        """Send update to WhatsApp via Pipedream webhook"""
-        weather = self.get_weather()
-        route = self.get_ski_route(weather)
-        fact = self.get_fun_fact()
-        message = self.compose_message(weather, route, fact)
-        
+
+    def send_whatsapp_message(self, group_name, message):
+        """Send WhatsApp message to specified group"""
         try:
-            response = requests.post(
-                self.webhook_url,
-                json={"message": message}
+            # Find and click on group
+            search_xpath = '//div[@contenteditable="true"][@data-tab="3"]'
+            search_box = WebDriverWait(self.driver, 20).until(
+                EC.presence_of_element_located((By.XPATH, search_xpath))
             )
-            return message if response.status_code == 200 else None
+            search_box.clear()
+            search_box.send_keys(group_name)
+            
+            # Click on the group
+            group_title = WebDriverWait(self.driver, 20).until(
+                EC.presence_of_element_located((By.XPATH, f"//span[@title='{group_name}']"))
+            )
+            group_title.click()
+            
+            # Find message input and send message
+            message_box = WebDriverWait(self.driver, 20).until(
+                EC.presence_of_element_located((By.XPATH, '//div[@contenteditable="true"][@data-tab="6"]'))
+            )
+            message_box.clear()
+            message_box.send_keys(message)
+            message_box.send_keys("\n")
+            
+            self.last_message_time = datetime.now()
+            return True
+            
         except Exception as e:
-            st.error(f"Fehler beim Senden der Nachricht: {e}")
-            return None
+            logger.error(f"Error sending WhatsApp message: {e}")
+            return False
 
-def main():
-    bot = ZakZakBot()
+    def scheduled_update(self, group_name):
+        """Send scheduled update"""
+        weather = self.get_weather()
+        route = self.slope_data.get_route_by_conditions(weather)
+        fact = self.get_fun_facts()
+        message = self.compose_message(weather, route, fact)
+        return self.send_whatsapp_message(group_name, message)
+
+def run_schedule():
+    """Run the scheduler"""
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
+
+# Initialize session state
+if 'bot' not in st.session_state:
+    st.session_state.bot = ZakZakBot()
+if 'scheduler_thread' not in st.session_state:
+    st.session_state.scheduler_thread = None
+
+# Streamlit UI
+st.title("ZakZak Daily")
+
+# Sidebar for configuration
+st.sidebar.header("Konfiguration")
+group_name = st.sidebar.text_input("WhatsApp Gruppe:", "Meine Ski Gruppe")
+schedule_time = st.sidebar.time_input("Tägliche Update-Zeit:", datetime.strptime("06:30", "%H:%M").time())
+
+# Main content area
+col1, col2 = st.columns(2)
+
+with col1:
+    st.header("WhatsApp Verbindung")
+    if st.button("WhatsApp Web verbinden"):
+        bot = st.session_state.bot
+        bot.setup_driver()
+        bot.driver.get("https://web.whatsapp.com")
+        st.info("Bitte scannen Sie den QR-Code mit WhatsApp auf Ihrem Handy")
+
+with col2:
+    st.header("Bot Status")
+    if st.session_state.bot.last_message_time:
+        st.write(f"Letzte Nachricht: {st.session_state.bot.last_message_time.strftime('%d.%m.%Y %H:%M')}")
+    if st.session_state.scheduler_thread and st.session_state.scheduler_thread.is_alive():
+        st.write("Status: Aktiv")
+    else:
+        st.write("Status: Inaktiv")
+
+# Preview section
+st.header("Vorschau")
+if st.button("Vorschau generieren"):
+    weather = st.session_state.bot.get_weather()
+    route = st.session_state.bot.slope_data.get_route_by_conditions(weather)
+    fact = st.session_state.bot.get_fun_facts()
+    message = st.session_state.bot.compose_message(weather, route, fact)
+    st.session_state.preview_message = message
+
+# Display preview in a card-like container
+if 'preview_message' in st.session_state and st.session_state.preview_message:
+    st.markdown("""
+        <style>
+        .preview-box {
+            background-color: #DCF8C6;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 10px 0;
+            font-family: 'Helvetica Neue', sans-serif;
+            white-space: pre-wrap;
+        }
+        </style>
+    """, unsafe_allow_html=True)
     
-    # Header
-    st.title("ZakZak Daily ⛷️")
-    st.write(f"Letztes Update: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
-    
-    # Get data
-    weather = bot.get_weather()
-    route = bot.get_ski_route(weather)
-    fact = bot.get_fun_fact()
-    
-    # Create three columns
-    col1, col2, col3 = st.columns(3)
-    
-    # Weather Card
-    with col1:
-        st.markdown("### ❄️ Wetterbedingungen")
-        st.write(f"🌡️ Temperatur: {weather['temperature']}°C")
-        st.write(f"☁️ Bedingungen: {weather['conditions']}")
-        st.write(f"❄️ Schneehöhe: {weather['snow']}cm")
-        st.write(f"💨 Wind: {weather['wind_speed']}km/h")
-    
-    # Ski Route Card
-    with col2:
-        st.markdown("### 🎿 Empfohlene Route")
-        st.write(f"**{route['name']}**")
-        st.write(f"Schwierigkeitsgrad: {route['difficulty']}")
-        st.write(f"Bedingungen: {route['conditions']}")
-    
-    # Fun Fact Card
-    with col3:
-        st.markdown("### 💡 Fun Fact")
-        st.write(fact)
-    
-    # WhatsApp message preview
-    st.markdown("### 📱 WhatsApp Nachricht Vorschau")
-    message = bot.compose_message(weather, route, fact)
-    st.code(message, language="")
-    
-    # Manual trigger button
-    if st.button("Update jetzt senden"):
-        sent_message = bot.send_whatsapp_update()
-        if sent_message:
-            st.success("Nachricht erfolgreich gesendet!")
+    st.markdown(f'<div class="preview-box">{st.session_state.preview_message}</div>', unsafe_allow_html=True)
+
+# Control buttons
+col3, col4 = st.columns(2)
+
+with col3:
+    if st.button("Zeitplan aktivieren"):
+        if not st.session_state.bot.driver:
+            st.error("Bitte zuerst WhatsApp Web verbinden!")
         else:
-            st.error("Fehler beim Senden der Nachricht")
+            schedule.every().day.at(schedule_time.strftime("%H:%M")).do(
+                st.session_state.bot.scheduled_update, group_name
+            )
+            
+            if not st.session_state.scheduler_thread or not st.session_state.scheduler_thread.is_alive():
+                st.session_state.scheduler_thread = threading.Thread(target=run_schedule)
+                st.session_state.scheduler_thread.start()
+                st.success(f"Bot wird täglich um {schedule_time.strftime('%H:%M')} Uhr Nachrichten senden")
 
-if __name__ == "__main__":
-    main()
+with col4:
+    if st.button("Jetzt senden"):
+        if not st.session_state.bot.driver:
+            st.error("Bitte zuerst WhatsApp Web verbinden!")
+        else:
+            with st.spinner("Sende Nachricht..."):
+                weather = st.session_state.bot.get_weather()
+                route = st.session_state.bot.slope_data.get_route_by_conditions(weather)
+                fact = st.session_state.bot.get_fun_facts()
+                message = st.session_state.bot.compose_message(weather, route, fact)
+                
+                if st.session_state.bot.send_whatsapp_message(group_name, message):
+                    st.success("Nachricht erfolgreich gesendet!")
+                else:
+                    st.error("Fehler beim Senden der Nachricht")
+
+# Footer
+st.markdown("---")
+st.markdown("Made with ❄️ for Zakopane")
