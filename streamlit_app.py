@@ -4,7 +4,6 @@ import json
 import logging
 from datetime import datetime
 import random
-import time
 from dataclasses import dataclass
 from typing import List, Dict
 import pytz
@@ -49,7 +48,56 @@ class ZakopaneData:
                 base_altitude=1027,
                 top_altitude=1959
             ),
-            # Add other lifts here...
+            'gasienicowa_chair': Lift(
+                name='Gąsienicowa Sessellift',
+                type='Sessellift',
+                capacity=2400,
+                length=1600,
+                vertical=300,
+                duration=8,
+                base_altitude=1375,
+                top_altitude=1675
+            ),
+            'goryczkowa_chair': Lift(
+                name='Goryczkowa Sessellift',
+                type='Sessellift',
+                capacity=2400,
+                length=1800,
+                vertical=320,
+                duration=9,
+                base_altitude=1350,
+                top_altitude=1670
+            ),
+            'szymoszkowa_chair': Lift(
+                name='Szymoszkowa Sessellift',
+                type='Sessellift',
+                capacity=2200,
+                length=1300,
+                vertical=160,
+                duration=7,
+                base_altitude=900,
+                top_altitude=1060
+            ),
+            'harenda_chair': Lift(
+                name='Harenda Sessellift',
+                type='Sessellift',
+                capacity=2000,
+                length=1600,
+                vertical=320,
+                duration=8,
+                base_altitude=750,
+                top_altitude=1070
+            ),
+            'nosal_lift': Lift(
+                name='Nosal Schlepplift',
+                type='Schlepplift',
+                capacity=1200,
+                length=650,
+                vertical=172,
+                duration=5,
+                base_altitude=1002,
+                top_altitude=1174
+            )
         }
         
         # Initialize slopes
@@ -64,7 +112,86 @@ class ZakopaneData:
                 access_lifts=['kasprowy_cable_car'],
                 night_skiing=False
             ),
-            # Add other slopes here...
+            'kasprowy_goryczkowa': Slope(
+                name='Kasprowy - Goryczkowa',
+                difficulty='Schwer',
+                length=3300,
+                vertical=850,
+                area='Kasprowy Wierch',
+                connects_to=['kasprowy_gasienicowa', 'goryczkowa_nizna'],
+                access_lifts=['kasprowy_cable_car'],
+                night_skiing=False
+            ),
+            'gasienicowa_nizna': Slope(
+                name='Gąsienicowa Niżna',
+                difficulty='Mittel',
+                length=1200,
+                vertical=250,
+                area='Kasprowy Wierch',
+                connects_to=['kasprowy_gasienicowa'],
+                access_lifts=['gasienicowa_chair'],
+                night_skiing=False
+            ),
+            'goryczkowa_nizna': Slope(
+                name='Goryczkowa Niżna',
+                difficulty='Mittel',
+                length=1400,
+                vertical=280,
+                area='Kasprowy Wierch',
+                connects_to=['kasprowy_goryczkowa'],
+                access_lifts=['goryczkowa_chair'],
+                night_skiing=False
+            ),
+            'szymoszkowa_1': Slope(
+                name='Szymoszkowa Hauptpiste',
+                difficulty='Mittel',
+                length=1300,
+                vertical=160,
+                area='Szymoszkowa',
+                connects_to=['szymoszkowa_2'],
+                access_lifts=['szymoszkowa_chair'],
+                night_skiing=True
+            ),
+            'szymoszkowa_2': Slope(
+                name='Szymoszkowa Familienpiste',
+                difficulty='Leicht',
+                length=1100,
+                vertical=140,
+                area='Szymoszkowa',
+                connects_to=['szymoszkowa_1'],
+                access_lifts=['szymoszkowa_chair'],
+                night_skiing=True
+            ),
+            'nosal_main': Slope(
+                name='Nosal Hauptabfahrt',
+                difficulty='Mittel',
+                length=650,
+                vertical=172,
+                area='Nosal',
+                connects_to=[],
+                access_lifts=['nosal_lift'],
+                night_skiing=True
+            ),
+            'harenda_family': Slope(
+                name='Harenda Familienpiste',
+                difficulty='Leicht',
+                length=2000,
+                vertical=300,
+                area='Harenda',
+                connects_to=['harenda_main'],
+                access_lifts=['harenda_chair'],
+                night_skiing=True
+            ),
+            'harenda_main': Slope(
+                name='Harenda Hauptpiste',
+                difficulty='Mittel',
+                length=2500,
+                vertical=320,
+                area='Harenda',
+                connects_to=['harenda_family'],
+                access_lifts=['harenda_chair'],
+                night_skiing=True
+            )
         }
 
 class WeatherService:
@@ -104,7 +231,7 @@ class WeatherService:
             "temperature": round(data["current"]["temperature_2m"]),
             "conditions": self._get_weather_description(data["current"]["weather_code"]),
             "wind_speed": round(data["current"]["wind_speed_10m"]),
-            "snow": round(data["hourly"]["snow_depth"][0] * 100),
+            "snow": round(data.get("hourly", {}).get("snow_depth", [0])[0] * 100),
             "altitude": altitude
         }
     
@@ -116,13 +243,25 @@ class WeatherService:
             2: "Teilweise bewölkt",
             3: "Bedeckt",
             45: "Neblig",
+            48: "Neblig mit Reif",
+            51: "Leichter Nieselregen",
+            53: "Mäßiger Nieselregen",
+            55: "Starker Nieselregen",
+            61: "Leichter Regen",
+            63: "Mäßiger Regen",
+            65: "Starker Regen",
             71: "Leichter Schneefall",
             73: "Mäßiger Schneefall",
-            75: "Starker Schneefall"
+            75: "Starker Schneefall",
+            77: "Schneegriesel",
+            85: "Leichte Schneeschauer",
+            86: "Starke Schneeschauer",
+            95: "Gewitter"
         }
         return descriptions.get(code, "Unbekannt")
     
     def _get_dummy_weather(self):
+        """Fallback weather data"""
         return {
             "valley": {
                 "temperature": 0,
@@ -165,14 +304,18 @@ class RouteGenerator:
         current_slope = start_slope
         
         while len(route) < 8:  # Maximum 8 slopes
+            if current_slope not in self.data.slopes:
+                break
+                
             slope = self.data.slopes[current_slope]
             lifts = [self.data.lifts[lift_id] for lift_id in slope.access_lifts]
             
-            route.append({
+            route_entry = {
+                'id': current_slope,
                 'slope': slope,
                 'lifts': lifts
-            })
-            
+            }
+            route.append(route_entry)
             used_slopes.add(current_slope)
             
             # Find next slope
@@ -225,111 +368,35 @@ class ZakZakBot:
         self.zakopane_data = ZakopaneData()
         self.route_generator = RouteGenerator(self.zakopane_data)
         self.last_update = None
-    
+
     def get_fun_fact(self):
-        facts = [
-            "Zakopane ist die höchstgelegene Stadt Polens",
-            "Die Stadt wird auch 'Winterhauptstadt Polens' genannt",
-            "Der Name bedeutet auf Polnisch 'vergraben'",
-            "Die typische Zakopane-Architektur wurde von Stanisław Witkiewicz entwickelt",
-            "Die Skisprungschanze Wielka Krokiew ist eines der Wahrzeichen der Stadt"
-        ]
-        return random.choice(facts)
-    
-    def compose_daily_message(self):
-        """Compose complete daily update message"""
-        weather = self.weather_service.get_weather()
-        route = self.route_generator.generate_daily_route(weather)
-        fact = self.get_fun_fact()
-        
-        message = f"""🏔 ZakZak Daily Update ⛷️
+        """Get random fun fact about Zakopane"""
+        facts = {
+            # General & History
+            "general": [
+                "Zakopane ist die höchstgelegene Stadt Polens",
+                "Sie ist bekannt als die 'Winterhauptstadt Polens'",
+                "Der Name bedeutet auf Polnisch 'vergraben'",
+                "Die Stadt liegt auf einer Höhe von 800-1000 Metern über dem Meeresspiegel",
+                "Zakopane wurde erst 1933 offiziell zur Stadt ernannt",
+                "Im 19. Jahrhundert war Zakopane ein kleines Hirtendorf mit nur 43 Häusern",
+                "Die Stadt hat etwa 27.000 Einwohner, empfängt aber jährlich über 2,5 Millionen Touristen",
+                "Die ersten Skifahrer kamen bereits in den 1890er Jahren nach Zakopane"
+            ],
 
-🌨 Wetter:
+            # Architecture & Culture
+            "culture": [
+                "Die typische Zakopane-Architektur wurde von Stanisław Witkiewicz entwickelt",
+                "Der Zakopane-Stil kombiniert lokale Górale-Traditionen mit Art Nouveau",
+                "Die Villa Koliba war das erste im Zakopane-Stil erbaute Haus",
+                "Die lokale Górale-Kultur ist für ihre charakteristische Musik und Tracht bekannt",
+                "Das Tatra-Museum wurde 1889 gegründet und zeigt die reiche Kulturgeschichte der Region",
+                "Die Krupówki ist die berühmte Fußgängerzone und das Herz der Stadt",
+                "In der Stadt gibt es über 500 denkmalgeschützte Holzhäuser",
+                "Die lokale Sprache 'Gwara Góralska' ist ein einzigartiger polnischer Dialekt"
+            ],
 
-📍 Tal ({weather['valley']['altitude']}m):
-• Temperatur: {weather['valley']['temperature']}°C
-• Bedingungen: {weather['valley']['conditions']}
-• Schneehöhe: {weather['valley']['snow']}cm
-• Wind: {weather['valley']['wind_speed']}km/h
-
-🏔 Berg ({weather['mountain']['altitude']}m):
-• Temperatur: {weather['mountain']['temperature']}°C
-• Bedingungen: {weather['mountain']['conditions']}
-• Schneehöhe: {weather['mountain']['snow']}cm
-• Wind: {weather['mountain']['wind_speed']}km/h
-
-{route}
-
-💡 Fun Fact:
-{fact}
-
-Einen schönen Tag auf der Piste! ⛷️"""
-        
-        self.last_update = datetime.now(pytz.timezone('Europe/Warsaw'))
-        return message
-
-def main():
-    st.set_page_config(page_title="ZakZak Daily", page_icon="⛷️", layout="wide")
-    
-    # Initialize bot in session state
-    if 'bot' not in st.session_state:
-        st.session_state.bot = ZakZakBot()
-    
-    # Main interface
-    st.title("ZakZak Daily ⛷️")
-    
-    # Current conditions
-    st.header("Aktuelle Bedingungen")
-    weather = st.session_state.bot.weather_service.get_weather()
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("### 📍 Tal")
-        st.write(f"Höhe: {weather['valley']['altitude']}m")
-        st.write(f"🌡️ Temperatur: {weather['valley']['temperature']}°C")
-        st.write(f"☁️ Bedingungen: {weather['valley']['conditions']}")
-        st.write(f"❄️ Schneehöhe: {weather['valley']['snow']}cm")
-        st.write(f"💨 Wind: {weather['valley']['wind_speed']}km/h")
-    
-    with col2:
-        st.markdown("### 🏔 Berg")
-        st.write(f"Höhe: {weather['mountain']['altitude']}m")
-        st.write(f"🌡️ Temperatur: {weather['mountain']['temperature']}°C")
-        st.write(f"☁️ Bedingungen: {weather['mountain']['conditions']}")
-        st.write(f"❄️ Schneehöhe: {weather['mountain']['snow']}cm")
-        st.write(f"💨 Wind: {weather['mountain']['wind_speed']}km/h")
-    
-    # Message preview
-    st.header("Tägliche Update Vorschau")
-    if st.button("Vorschau generieren"):
-        message = st.session_state.bot.compose_daily_message()
-        st.session_state.preview_message = message
-    
-    if 'preview_message' in st.session_state:
-        st.markdown("""
-            <style>
-            .preview-box {
-                background-color: #DCF8C6;
-                border-radius: 10px;
-                padding: 20px;
-                margin: 10px 0;
-                font-family: 'Helvetica Neue', sans-serif;
-                white-space: pre-wrap;
-            }
-            </style>
-        """, unsafe_allow_html=True)
-        
-        st.markdown(f'<div class="preview-box">{st.session_state.preview_message}</div>', 
-                   unsafe_allow_html=True)
-    
-    # Status information
-    st.sidebar.header("Status")
-    if st.session_state.bot.last_update:
-        st.sidebar.write(f"Letztes Update: {st.session_state.bot.last_update.strftime('%d.%m.%Y %H:%M')}")
-    
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("Made with ❄️ for Zakopane")
-
-if __name__ == "__main__":
-    main()
+            # Sports & Recreation
+            "sports": [
+                "Die Skisprungschanze Wielka Krokiew ist eines der Wahrzeichen der Stadt",
+                "Auf der Wielka
