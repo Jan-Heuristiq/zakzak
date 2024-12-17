@@ -12,6 +12,37 @@ import pytz
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Set page configuration
+st.set_page_config(
+    page_title="ZakZak Daily",
+    page_icon="⛷️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS
+st.markdown("""
+    <style>
+    .main {
+        background: linear-gradient(180deg, #FFFFFF 0%, #FFE5E5 50%, #FF9999 100%);
+    }
+    .stApp {
+        background: linear-gradient(180deg, #FFFFFF 0%, #FFE5E5 50%, #FF9999 100%);
+    }
+    h1 {
+        color: #1e3a8a !important;
+    }
+    .preview-box {
+        background-color: #DCF8C6;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 10px 0;
+        font-family: 'Helvetica Neue', sans-serif;
+        white-space: pre-wrap;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 @dataclass
 class Lift:
     name: str
@@ -368,11 +399,10 @@ class ZakZakBot:
         self.zakopane_data = ZakopaneData()
         self.route_generator = RouteGenerator(self.zakopane_data)
         self.last_update = None
-
+    
     def get_fun_fact(self):
         """Get random fun fact about Zakopane"""
         facts = {
-            # General & History
             "general": [
                 "Zakopane ist die höchstgelegene Stadt Polens",
                 "Sie ist bekannt als die 'Winterhauptstadt Polens'",
@@ -383,20 +413,8 @@ class ZakZakBot:
                 "Die Stadt hat etwa 27.000 Einwohner, empfängt aber jährlich über 2,5 Millionen Touristen",
                 "Die ersten Skifahrer kamen bereits in den 1890er Jahren nach Zakopane"
             ],
-
-            # Architecture & Culture
             "culture": [
                 "Die typische Zakopane-Architektur wurde von Stanisław Witkiewicz entwickelt",
                 "Der Zakopane-Stil kombiniert lokale Górale-Traditionen mit Art Nouveau",
                 "Die Villa Koliba war das erste im Zakopane-Stil erbaute Haus",
-                "Die lokale Górale-Kultur ist für ihre charakteristische Musik und Tracht bekannt",
-                "Das Tatra-Museum wurde 1889 gegründet und zeigt die reiche Kulturgeschichte der Region",
-                "Die Krupówki ist die berühmte Fußgängerzone und das Herz der Stadt",
-                "In der Stadt gibt es über 500 denkmalgeschützte Holzhäuser",
-                "Die lokale Sprache 'Gwara Góralska' ist ein einzigartiger polnischer Dialekt"
-            ],
-
-            # Sports & Recreation
-            "sports": [
-                "Die Skisprungschanze Wielka Krokiew ist eines der Wahrzeichen der Stadt",
-                "Auf der Wielka
+                "Die lokale Górale-Kultur ist für ihre charakteristische Musik und Tracht bek
