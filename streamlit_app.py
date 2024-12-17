@@ -65,6 +65,91 @@ class Slope:
     access_lifts: List[str]
     night_skiing: bool
 
+class WeatherService:
+    def __init__(self):
+        self.valley_coords = (49.299, 19.949)  # Zakopane center
+        self.mountain_coords = (49.232, 19.982)  # Kasprowy Wierch
+        
+    def get_weather(self):
+        """Fetch weather for both valley and mountain locations"""
+        try:
+            valley_weather = self._fetch_weather(*self.valley_coords, 850)
+            mountain_weather = self._fetch_weather(*self.mountain_coords, 1987)
+            
+            return {
+                "valley": valley_weather,
+                "mountain": mountain_weather
+            }
+        except Exception as e:
+            logger.error(f"Weather fetch error: {e}")
+            return self._get_dummy_weather()
+    
+    def _fetch_weather(self, lat, lon, altitude):
+        """Fetch weather for specific location"""
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "current": ["temperature_2m", "weather_code", "wind_speed_10m"],
+            "hourly": "snow_depth",
+            "timezone": "Europe/Warsaw"
+        }
+        
+        response = requests.get(url, params=params)
+        data = response.json()
+        
+        return {
+            "temperature": round(data["current"]["temperature_2m"]),
+            "conditions": self._get_weather_description(data["current"]["weather_code"]),
+            "wind_speed": round(data["current"]["wind_speed_10m"]),
+            "snow": round(data.get("hourly", {}).get("snow_depth", [0])[0] * 100),
+            "altitude": altitude
+        }
+    
+    def _get_weather_description(self, code):
+        """Convert weather code to German description"""
+        descriptions = {
+            0: "Klar",
+            1: "Überwiegend klar",
+            2: "Teilweise bewölkt",
+            3: "Bedeckt",
+            45: "Neblig",
+            48: "Neblig mit Reif",
+            51: "Leichter Nieselregen",
+            53: "Mäßiger Nieselregen",
+            55: "Starker Nieselregen",
+            61: "Leichter Regen",
+            63: "Mäßiger Regen",
+            65: "Starker Regen",
+            71: "Leichter Schneefall",
+            73: "Mäßiger Schneefall",
+            75: "Starker Schneefall",
+            77: "Schneegriesel",
+            85: "Leichte Schneeschauer",
+            86: "Starke Schneeschauer",
+            95: "Gewitter"
+        }
+        return descriptions.get(code, "Unbekannt")
+    
+    def _get_dummy_weather(self):
+        """Fallback weather data"""
+        return {
+            "valley": {
+                "temperature": 0,
+                "conditions": "Schneefall",
+                "wind_speed": 5,
+                "snow": 10,
+                "altitude": 850
+            },
+            "mountain": {
+                "temperature": -5,
+                "conditions": "Schneefall",
+                "wind_speed": 15,
+                "snow": 30,
+                "altitude": 1987
+            }
+        }
+
 class ZakopaneData:
     def __init__(self):
         # Initialize lifts
@@ -225,91 +310,6 @@ class ZakopaneData:
             )
         }
 
-class WeatherService:
-    def __init__(self):
-        self.valley_coords = (49.299, 19.949)  # Zakopane center
-        self.mountain_coords = (49.232, 19.982)  # Kasprowy Wierch
-        
-    def get_weather(self):
-        """Fetch weather for both valley and mountain locations"""
-        try:
-            valley_weather = self._fetch_weather(*self.valley_coords, 850)
-            mountain_weather = self._fetch_weather(*self.mountain_coords, 1987)
-            
-            return {
-                "valley": valley_weather,
-                "mountain": mountain_weather
-            }
-        except Exception as e:
-            logger.error(f"Weather fetch error: {e}")
-            return self._get_dummy_weather()
-    
-    def _fetch_weather(self, lat, lon, altitude):
-        """Fetch weather for specific location"""
-        url = "https://api.open-meteo.com/v1/forecast"
-        params = {
-            "latitude": lat,
-            "longitude": lon,
-            "current": ["temperature_2m", "weather_code", "wind_speed_10m"],
-            "hourly": "snow_depth",
-            "timezone": "Europe/Warsaw"
-        }
-        
-        response = requests.get(url, params=params)
-        data = response.json()
-        
-        return {
-            "temperature": round(data["current"]["temperature_2m"]),
-            "conditions": self._get_weather_description(data["current"]["weather_code"]),
-            "wind_speed": round(data["current"]["wind_speed_10m"]),
-            "snow": round(data.get("hourly", {}).get("snow_depth", [0])[0] * 100),
-            "altitude": altitude
-        }
-    
-    def _get_weather_description(self, code):
-        """Convert weather code to German description"""
-        descriptions = {
-            0: "Klar",
-            1: "Überwiegend klar",
-            2: "Teilweise bewölkt",
-            3: "Bedeckt",
-            45: "Neblig",
-            48: "Neblig mit Reif",
-            51: "Leichter Nieselregen",
-            53: "Mäßiger Nieselregen",
-            55: "Starker Nieselregen",
-            61: "Leichter Regen",
-            63: "Mäßiger Regen",
-            65: "Starker Regen",
-            71: "Leichter Schneefall",
-            73: "Mäßiger Schneefall",
-            75: "Starker Schneefall",
-            77: "Schneegriesel",
-            85: "Leichte Schneeschauer",
-            86: "Starke Schneeschauer",
-            95: "Gewitter"
-        }
-        return descriptions.get(code, "Unbekannt")
-    
-    def _get_dummy_weather(self):
-        """Fallback weather data"""
-        return {
-            "valley": {
-                "temperature": 0,
-                "conditions": "Schneefall",
-                "wind_speed": 5,
-                "snow": 10,
-                "altitude": 850
-            },
-            "mountain": {
-                "temperature": -5,
-                "conditions": "Schneefall",
-                "wind_speed": 15,
-                "snow": 30,
-                "altitude": 1987
-            }
-        }
-
 class RouteGenerator:
     def __init__(self, zakopane_data):
         self.data = zakopane_data
@@ -400,6 +400,38 @@ class ZakZakBot:
         self.route_generator = RouteGenerator(self.zakopane_data)
         self.last_update = None
     
+    def compose_daily_message(self):
+        """Compose complete daily update message"""
+        weather = self.weather_service.get_weather()
+        route = self.route_generator.generate_daily_route(weather)
+        fact = self.get_fun_fact()
+        
+        message = f"""🏔 ZakZak Daily Update ⛷️
+
+🌨 Wetter:
+
+📍 Tal ({weather['valley']['altitude']}m):
+• Temperatur: {weather['valley']['temperature']}°C
+• Bedingungen: {weather['valley']['conditions']}
+• Schneehöhe: {weather['valley']['snow']}cm
+• Wind: {weather['valley']['wind_speed']}km/h
+
+🏔 Berg ({weather['mountain']['altitude']}m):
+• Temperatur: {weather['mountain']['temperature']}°C
+• Bedingungen: {weather['mountain']['conditions']}
+• Schneehöhe: {weather['mountain']['snow']}cm
+• Wind: {weather['mountain']['wind_speed']}km/h
+
+{route}
+
+💡 Fun Fact:
+{fact}
+
+Einen schönen Tag auf der Piste! ⛷️"""
+        
+        self.last_update = datetime.now(pytz.timezone('Europe/Warsaw'))
+        return message
+
     def get_fun_fact(self):
         """Get random fun fact about Zakopane"""
         facts = {
@@ -417,4 +449,48 @@ class ZakZakBot:
                 "Die typische Zakopane-Architektur wurde von Stanisław Witkiewicz entwickelt",
                 "Der Zakopane-Stil kombiniert lokale Górale-Traditionen mit Art Nouveau",
                 "Die Villa Koliba war das erste im Zakopane-Stil erbaute Haus",
-                "Die lokale Górale-Kultur ist für ihre charakteristische Musik und Tracht bek
+                "Die lokale Górale-Kultur ist für ihre charakteristische Musik und Tracht bekannt",
+                "Das Tatra-Museum wurde 1889 gegründet und zeigt die reiche Kulturgeschichte der Region",
+                "Die Krupówki ist die berühmte Fußgängerzone und das Herz der Stadt",
+                "In der Stadt gibt es über 500 denkmalgeschützte Holzhäuser",
+                "Die lokale Sprache 'Gwara Góralska' ist ein einzigartiger polnischer Dialekt"
+            ],
+            "sports": [
+                "Die Skisprungschanze Wielka Krokiew ist eines der Wahrzeichen der Stadt",
+                "Auf der Wielka Krokiew finden regelmäßig Weltcup-Springen statt",
+                "Der erste Skiclub Polens wurde 1907 in Zakopane gegründet",
+                "1929 fand hier die erste FIS-Weltmeisterschaft außerhalb Mitteleuropas statt",
+                "Zakopane war zweimal Kandidat für die Olympischen Winterspiele",
+                "Die Stadt war Austragungsort der Nordischen Junioren-WM 2008",
+                "Im Sommer ist Zakopane ein beliebtes Ziel für Wanderer und Bergsteiger",
+                "Es gibt über 275 Kilometer markierte Wanderwege in der Region"
+            ],
+            "nature": [
+                "Die Stadt liegt am Fuß der Tatra, dem höchsten Gebirgszug der Karpaten",
+                "Der Kasprowy Wierch (1.987 m) ist der bekannteste Skiberg Zakopanes",
+                "Im Winter können die Temperaturen auf bis zu -30°C fallen",
+                "Die Tatra-Region beherbergt seltene Tierarten wie Braunbären und Gämsen",
+                "Der Tatra-Nationalpark wurde 1954 gegründet",
+                "Die Bergkette Giewont sieht aus wie ein 'schlafender Ritter'",
+                "In den Tatra-Bergen gibt es über 30 Bergseen",
+                "Der höchste Berg Polens, Rysy (2.499 m), liegt in der Nähe von Zakopane"
+            ],
+            "cuisine": [
+                "Oscypek, der lokale Räucherkäse, hat EU-geschützte Herkunftsbezeichnung",
+                "Żurek po Góralsku ist eine spezielle Variante der traditionellen polnischen Suppe",
+                "Kwaśnica, eine säuerliche Krautsuppe, ist ein typisches Góralen-Gericht",
+                "Moskole sind traditionelle Kartoffelpuffer der Region",
+                "Der lokale Tee 'Herbata po Góralsku' wird mit Wodka serviert",
+                "Bundz ist ein spezieller Schafskäse, der nur im Sommer hergestellt wird",
+                "Die traditionelle Góralen-Küche basiert auf Lamm- und Schaffleisch",
+                "Im Winter werden oft 'Grzaniec' (Glühwein) und heißer Met serviert"
+            ]
+        }
+        
+        # Flatten all categories into one list
+        all_facts = []
+        for category in facts.values():
+            all_facts.extend(category)
+        
+        return random.choice(all_facts)
+
