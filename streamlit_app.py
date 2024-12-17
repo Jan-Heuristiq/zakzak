@@ -4,7 +4,6 @@ import json
 import logging
 from datetime import datetime
 import random
-import schedule
 import time
 from dataclasses import dataclass
 from typing import List, Dict
