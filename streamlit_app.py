@@ -19,37 +19,116 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
+# Modern UI styling
 st.markdown("""
     <style>
+    /* Modern color scheme */
+    :root {
+        --primary-color: #005A94;
+        --accent-color: #E63946;
+        --light-bg: #F8F9FA;
+        --dark-text: #2B2D42;
+    }
+    
+    /* Base styles */
     .main {
-        background: linear-gradient(180deg, #FFFFFF 0%, #FFE5E5 50%, #FF9999 100%);
+        background-color: white;
+        padding: 2rem;
     }
+    
     .stApp {
-        background: linear-gradient(180deg, #FFFFFF 0%, #FFE5E5 50%, #FF9999 100%);
+        background-color: white;
     }
+    
+    /* Typography */
     h1 {
-        color: #1e3a8a !important;
+        color: var(--primary-color) !important;
+        font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-weight: 700 !important;
+        font-size: 2.5rem !important;
+        letter-spacing: -0.02em;
+        margin-bottom: 2rem !important;
     }
-    .preview-box {
-        background-color: #DCF8C6;
-        border-radius: 10px;
-        padding: 20px;
-        margin: 10px 0;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        white-space: pre-wrap;
+    
+    h3 {
+        color: var(--dark-text) !important;
+        font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-weight: 600 !important;
+        font-size: 1.5rem !important;
+        margin-top: 2rem !important;
     }
-    .copy-button {
-        background-color: #4CAF50;
-        color: white;
-        padding: 10px 20px;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        margin-top: 10px;
+    
+    /* Card styling */
+    .stMarkdown {
+        background: var(--light-bg);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        border: 1px solid #E5E7EB;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
-    .copy-button:hover {
-        background-color: #45a049;
+    
+    /* Button styling */
+    .stButton > button {
+        background-color: var(--primary-color) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 0.75rem 1.5rem !important;
+        font-weight: 500 !important;
+        transition: all 0.2s ease;
+    }
+    
+    .stButton > button:hover {
+        background-color: #004A7C !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    /* Code block styling */
+    .stCodeBlock {
+        background-color: white !important;
+        border: 1px solid #E5E7EB !important;
+        border-radius: 12px !important;
+        padding: 1rem !important;
+        margin: 1rem 0 !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    /* Expander styling */
+    .streamlit-expanderHeader {
+        background-color: white !important;
+        border: 1px solid #E5E7EB !important;
+        border-radius: 8px !important;
+        padding: 1rem !important;
+        font-weight: 500 !important;
+        color: var(--dark-text) !important;
+    }
+    
+    /* Sidebar styling */
+    .css-1d391kg {
+        background-color: var(--light-bg) !important;
+        padding: 2rem 1rem;
+    }
+    
+    /* Stats cards */
+    .stat-card {
+        background-color: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        border: 1px solid #E5E7EB;
+        margin-bottom: 1rem;
+    }
+    
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--primary-color);
+    }
+    
+    .stat-label {
+        font-size: 0.875rem;
+        color: #6B7280;
+        margin-top: 0.25rem;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -216,7 +295,7 @@ class MessageComposer:
     def __init__(self):
         self.weather_service = WeatherService()
         self.route_generator = RouteGenerator()
-        self.webapp_url = "https://zakzak.streamlit.app"  # Replace with actual URL
+        self.webapp_url = "https://zak-zak-daily.streamlit.app"  # Replace with actual URL
 
     def compose_message(self) -> Tuple[str, List[Dict]]:
         """Compose the complete message and return with detailed route info"""
@@ -251,27 +330,48 @@ Lasst es krachen, ihr Skihasen ❄️🐰"""
         return message, detailed_route
 
 def display_message_section():
-    """Display the message section with copy functionality"""
+    """Display the message section with modern styling"""
     message, detailed_route = st.session_state.composer.compose_message()
+    
+    st.markdown("""
+        <div style='
+            background-color: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid #E5E7EB;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        '>
+        """, 
+        unsafe_allow_html=True
+    )
     
     st.code(message, language="text")
     
-    if st.button("In Zwischenablage kopieren"):
-        st.write("Nachricht in die Zwischenablage kopiert!", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        if st.button("In Zwischenablage kopieren"):
+            st.write("✓ Kopiert!", unsafe_allow_html=True)
     
     return detailed_route
 
 def display_route_details(detailed_route: List[Dict]):
-    """Display detailed route information"""
-    st.markdown("### Vollständige Informationen zur Route")
+    """Display detailed route information with modern styling"""
+    st.markdown("### Route Details")
+    
     for i, route in enumerate(detailed_route, 1):
-        with st.expander(f"{i}. {route['name']}"):
-            st.write(f"Schwierigkeit: {route['difficulty']}")
-            st.write(f"Länge: {route['length']}m")
-            st.write(f"Höhenmeter: {route['vertical']}m")
-            st.write("Aufstieg mit:")
+        with st.expander(f"{i}. {route['name']}", expanded=False):
+            cols = st.columns([1, 1, 1])
+            with cols[0]:
+                st.markdown(f"**Schwierigkeit:** {route['difficulty']}")
+            with cols[1]:
+                st.markdown(f"**Länge:** {route['length']}m")
+            with cols[2]:
+                st.markdown(f"**Höhenmeter:** {route['vertical']}m")
+            
+            st.markdown("**Aufstieg mit:**")
             for lift in route['lifts']:
-                st.write(f"• {lift}")
+                st.markdown(f"• {lift}")
 
 def main():
     # Get current date in German format
