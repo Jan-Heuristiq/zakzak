@@ -493,4 +493,79 @@ Einen schönen Tag auf der Piste! ⛷️"""
             all_facts.extend(category)
         
         return random.choice(all_facts)
+def main():
+    st.title("ZakZak Daily ⛷️")
+    
+    # Initialize bot in session state if not exists
+    if 'bot' not in st.session_state:
+        st.session_state.bot = ZakZakBot()
+    
+    # Current conditions
+    st.header("Aktuelle Bedingungen")
+    weather = st.session_state.bot.weather_service.get_weather()
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### 📍 Tal")
+        st.write(f"Höhe: {weather['valley']['altitude']}m")
+        st.write(f"🌡️ Temperatur: {weather['valley']['temperature']}°C")
+        st.write(f"☁️ Bedingungen: {weather['valley']['conditions']}")
+        st.write(f"❄️ Schneehöhe: {weather['valley']['snow']}cm")
+        st.write(f"💨 Wind: {weather['valley']['wind_speed']}km/h")
+    
+    with col2:
+        st.markdown("### 🏔 Berg")
+        st.write(f"Höhe: {weather['mountain']['altitude']}m")
+        st.write(f"🌡️ Temperatur: {weather['mountain']['temperature']}°C")
+        st.write(f"☁️ Bedingungen: {weather['mountain']['conditions']}")
+        st.write(f"❄️ Schneehöhe: {weather['mountain']['snow']}cm")
+        st.write(f"💨 Wind: {weather['mountain']['wind_speed']}km/h")
+    
+    # Route and message preview
+    st.header("Tages-Update")
+    
+    if st.button("Update generieren"):
+        message = st.session_state.bot.compose_daily_message()
+        st.session_state.preview_message = message
+        st.session_state.last_update = datetime.now(pytz.timezone('Europe/Warsaw'))
+    
+    # Display preview if available
+    if 'preview_message' in st.session_state:
+        st.markdown("""
+            <style>
+            .preview-box {
+                background-color: #DCF8C6;
+                border-radius: 10px;
+                padding: 20px;
+                margin: 10px 0;
+                font-family: 'Helvetica Neue', sans-serif;
+                white-space: pre-wrap;
+                border: 1px solid #a8dbbb;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+        
+        st.markdown(f'<div class="preview-box">{st.session_state.preview_message}</div>', 
+                   unsafe_allow_html=True)
+    
+    # Sidebar information
+    st.sidebar.header("Information")
+    if 'last_update' in st.session_state:
+        st.sidebar.write(f"Letztes Update: {st.session_state.last_update.strftime('%d.%m.%Y %H:%M')}")
+    
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("""
+        ### Über ZakZak Daily
+        Tägliche Updates über:
+        - Wetterbedingungen
+        - Empfohlene Skirouten
+        - Interessante Fakten
+    """)
+    
+    # Footer
+    st.markdown("---")
+    st.markdown("Made with ❄️ for Zakopane")
 
+if __name__ == "__main__":
+    main()
