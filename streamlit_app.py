@@ -206,17 +206,17 @@ class RouteGenerator:
             slope_info["lifts"] = [random.choice(LIFTS_DATA)]
             detailed_route.append(slope_info)
         
-        return (route_message, detailed_route, {
+        return route_message, detailed_route, {
             "total_length": total_length,
             "total_vertical": total_vertical,
             "estimated_time": estimated_time
-        })
+        }
 
 class MessageComposer:
     def __init__(self):
         self.weather_service = WeatherService()
         self.route_generator = RouteGenerator()
-        self.webapp_url = "https://zak-zak-daily.streamlit.app"  # Replace with actual URL
+        self.webapp_url = "https://zakzak.streamlit.app"  # Replace with actual URL
 
     def compose_message(self) -> Tuple[str, List[Dict]]:
         """Compose the complete message and return with detailed route info"""
