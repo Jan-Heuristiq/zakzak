@@ -1,63 +1,126 @@
 import streamlit as st
-import requests
 import logging
 from datetime import datetime
 import random
 from dataclasses import dataclass
-from typing import List
+from typing import List, Dict, Tuple
 import pytz
-from functools import lru_cache
 
-# [Previous imports and basic setup remain the same]
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Set page configuration
+st.set_page_config(
+    page_title="ZakZak Daily",
+    page_icon="⛷️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Constants and configurations
+FACTS = {
+    "general": [
+        "Zakopane ist die höchstgelegene Stadt Polens",
+        "Sie ist bekannt als die 'Winterhauptstadt Polens'",
+        "Der Name bedeutet auf Polnisch 'vergraben'",
+        "Die Stadt liegt auf einer Höhe von 800-1000 Metern"
+    ],
+    "sports": [
+        "Die Skisprungschanze Wielka Krokiew ist eines der Wahrzeichen",
+        "Der erste Skiclub Polens wurde 1907 in Zakopane gegründet"
+    ],
+    "nature": [
+        "Die Stadt liegt am Fuß der Tatra",
+        "Der Kasprowy Wierch (1.987 m) ist der bekannteste Skiberg"
+    ]
+}
+
+SLOPES_DATA = [
+    {"name": "Kasprowy Hauptabfahrt", "difficulty": "Schwer", "length": 3200, "vertical": 900},
+    {"name": "Gąsienicowa Route", "difficulty": "Mittel", "length": 2800, "vertical": 700},
+    {"name": "Goryczkowa Abfahrt", "difficulty": "Schwer", "length": 3000, "vertical": 850},
+    {"name": "Szymoszkowa Hauptpiste", "difficulty": "Mittel", "length": 1300, "vertical": 160},
+    {"name": "Harenda Family", "difficulty": "Leicht", "length": 2000, "vertical": 300},
+    {"name": "Nosal Classic", "difficulty": "Mittel", "length": 650, "vertical": 172},
+    {"name": "Goryczkowa West", "difficulty": "Schwer", "length": 2900, "vertical": 800},
+    {"name": "Gąsienicowa Süd", "difficulty": "Mittel", "length": 2500, "vertical": 600},
+    {"name": "Kasprowy Nord", "difficulty": "Schwer", "length": 3100, "vertical": 880},
+    {"name": "Szymoszkowa Sport", "difficulty": "Mittel", "length": 1400, "vertical": 180}
+]
+
+LIFTS_DATA = [
+    "Kasprowy Seilbahn",
+    "Gąsienicowa Sessellift",
+    "Goryczkowa Sessellift",
+    "Szymoszkowa Sessellift",
+    "Harenda Sessellift",
+    "Nosal Schlepplift"
+]
+
+class WeatherService:
+    def __init__(self):
+        self._valley_altitude = 850
+        self._mountain_altitude = 1987
+
+    def get_weather(self) -> Dict:
+        """Get weather data for valley and mountain"""
+        return {
+            "valley": {
+                "temperature": 0,
+                "conditions": "Schneefall",
+                "wind_speed": 5,
+                "snow": 10,
+                "altitude": self._valley_altitude
+            },
+            "mountain": {
+                "temperature": -5,
+                "conditions": "Schneefall",
+                "wind_speed": 15,
+                "snow": 30,
+                "altitude": self._mountain_altitude
+            }
+        }
 
 class RouteGenerator:
-    def __init__(self, zakopane_data):
-        self.data = zakopane_data
-
-    def generate_daily_route(self, weather):
-        """Generate a longer route with multiple slopes"""
-        possible_routes = [
-            ["Kasprowy Hauptabfahrt", "Gąsienicowa Route", "Goryczkowa Abfahrt", 
-             "Szymoszkowa Hauptpiste", "Harenda Family", "Nosal Classic", 
-             "Goryczkowa West", "Gąsienicowa Süd", "Kasprowy Nord", "Szymoszkowa Sport"],
-            ["Szymoszkowa Sport", "Harenda Classic", "Nosal Hauptpiste", 
-             "Kasprowy Express", "Gąsienicowa Classic", "Goryczkowa Panorama", 
-             "Szymoszkowa Family", "Harenda Sport", "Kasprowy Challenge", "Nosal Family"]
-        ]
+    def generate_route(self) -> Tuple[str, List[Dict]]:
+        """Generate a route with message format and detailed information"""
+        # Select 10 random slopes
+        selected_slopes = random.sample(SLOPES_DATA, 10)
         
-        selected_route = random.choice(possible_routes)
+        # Calculate totals
+        total_length = sum(slope["length"] for slope in selected_slopes)
+        total_vertical = sum(slope["vertical"] for slope in selected_slopes)
+        estimated_time = int(total_length / 200 + len(selected_slopes) * 5)
         
-        # Simplified message for WhatsApp
-        message_route = "\n".join(f"{i+1}. {slope}" for i, slope in enumerate(selected_route))
+        # Generate simple route listing for message
+        route_message = "\n".join(
+            f"{i+1}. {slope['name']}" 
+            for i, slope in enumerate(selected_slopes)
+        )
         
-        # Detailed info for website display
+        # Add random lifts to detailed information
         detailed_route = []
-        for slope in selected_route:
-            detailed_route.append({
-                "name": slope,
-                "difficulty": random.choice(["Leicht", "Mittel", "Schwer"]),
-                "length": random.randint(800, 3500),
-                "vertical": random.randint(100, 900),
-                "lifts": [random.choice(["Sessellift", "Schlepplift", "Seilbahn"])]
-            })
+        for slope in selected_slopes:
+            slope_info = slope.copy()
+            slope_info["lifts"] = [random.choice(LIFTS_DATA)]
+            detailed_route.append(slope_info)
         
-        return message_route, detailed_route
+        return (route_message, detailed_route, {
+            "total_length": total_length,
+            "total_vertical": total_vertical,
+            "estimated_time": estimated_time
+        })
 
-class ZakZakBot:
+class MessageComposer:
     def __init__(self):
         self.weather_service = WeatherService()
-        self.zakopane_data = ZakopaneData()
-        self.route_generator = RouteGenerator(self.zakopane_data)
+        self.route_generator = RouteGenerator()
 
-    def compose_daily_message(self):
-        """Compose message with optimized spacing"""
+    def compose_message(self) -> Tuple[str, List[Dict]]:
+        """Compose the complete message and return with detailed route info"""
         weather = self.weather_service.get_weather()
-        route_message, detailed_route = self.route_generator.generate_daily_route(weather)
-        
-        # Calculate total length and vertical
-        total_length = sum(r["length"] for r in detailed_route)
-        total_vertical = sum(r["vertical"] for r in detailed_route)
-        estimated_time = int(total_length / 200 + len(detailed_route) * 5)  # Rough estimate
+        route_message, detailed_route, totals = self.route_generator.generate_route()
         
         message = f"""🏔 ZakZak Daily Update ⛷️
 🌨 Wetter:
@@ -68,41 +131,34 @@ class ZakZakBot:
 
 🎿 Heute empfohlene Route:
 📊 Routenübersicht:
-• Gesamtlänge: {total_length}m • Höhenmeter: {total_vertical}m • Anzahl Pisten: {len(detailed_route)} • Geschätzte Dauer: {estimated_time} Minuten
+• Gesamtlänge: {totals['total_length']}m • Höhenmeter: {totals['total_vertical']}m • Anzahl Pisten: {len(detailed_route)} • Geschätzte Dauer: {totals['estimated_time']} Minuten
 
 🗺️ Routenverlauf:
 {route_message}
 
 💡 Fun Fact:
-{random.choice(list(sum(FACTS.values(), [])))}
+{random.choice(sum(FACTS.values(), []))}
 
 Einen schönen Tag auf der Piste! ⛷️"""
         
         return message, detailed_route
 
-def main():
-    st.title("ZakZak Daily ⛷️")
+def display_message_section():
+    """Display the message section with copy functionality"""
+    message, detailed_route = st.session_state.composer.compose_message()
     
-    # Initialize bot in session state if not exists
-    if 'bot' not in st.session_state:
-        st.session_state.bot = ZakZakBot()
-    
-    # Generate message immediately
-    if 'message' not in st.session_state:
-        message, detailed_route = st.session_state.bot.compose_daily_message()
-        st.session_state.message = message
-        st.session_state.detailed_route = detailed_route
-    
-    # Display message with copy button
     st.markdown("### WhatsApp Nachricht")
-    st.code(st.session_state.message, language="text")
-    st.button("In Zwischenablage kopieren", 
-             on_click=lambda: st.write("", 
-             unsafe_allow_html=True))
+    st.code(message, language="text")
     
-    # Display detailed route information
+    if st.button("In Zwischenablage kopieren"):
+        st.write("Nachricht in die Zwischenablage kopiert!", unsafe_allow_html=True)
+    
+    return detailed_route
+
+def display_route_details(detailed_route: List[Dict]):
+    """Display detailed route information"""
     st.markdown("### Vollständige Informationen zur Route")
-    for i, route in enumerate(st.session_state.detailed_route, 1):
+    for i, route in enumerate(detailed_route, 1):
         with st.expander(f"{i}. {route['name']}"):
             st.write(f"Schwierigkeit: {route['difficulty']}")
             st.write(f"Länge: {route['length']}m")
@@ -110,15 +166,23 @@ def main():
             st.write("Aufstieg mit:")
             for lift in route['lifts']:
                 st.write(f"• {lift}")
+
+def main():
+    st.title("ZakZak Daily ⛷️")
     
-    # Refresh button
+    # Initialize composer in session state if not exists
+    if 'composer' not in st.session_state:
+        st.session_state.composer = MessageComposer()
+    
+    # Display main sections
+    detailed_route = display_message_section()
+    display_route_details(detailed_route)
+    
+    # Add refresh button
     if st.button("Neue Route generieren"):
-        message, detailed_route = st.session_state.bot.compose_daily_message()
-        st.session_state.message = message
-        st.session_state.detailed_route = detailed_route
         st.experimental_rerun()
     
-    # Sidebar information
+    # Sidebar
     st.sidebar.header("Information")
     st.sidebar.markdown("""
         ### Über ZakZak Daily
